@@ -4,6 +4,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 import pandas as pd
+import vtk
 
 # Ubicar 'covid_DB.xlsx'
 file_path = 'covid_DB.xlsx'
@@ -30,9 +31,6 @@ data = data.dropna(axis=1, how='all')
 # Imputar los valores NaN restantes con la media de cada columna
 imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
 data_imputed = imputer.fit_transform(data)
-
-
-#print(data_imputed)
 
 # Escalar los datos
 scaler = StandardScaler()
@@ -61,4 +59,67 @@ print("Número mínimo de componentes para explicar al menos el 95% de la varian
 pca = PCA(n_components=n_componentNumber)  # número de componentes a reducir
 principal_components = pca.fit_transform(scaled_data)
 
+# Cargar los datos originales incluyendo la columna "Patient ID"
+data_with_id = pd.read_excel('covid_DB.xlsx')
+
+# Crear un DataFrame con los componentes y el ID del paciente
+df_componentes = pd.DataFrame(principal_components, columns=[f'Componente_{i}' for i in range(1, n_componentNumber + 1)])
+df_componentes['Patient ID'] = data_with_id['Patient ID']  # Agregar la columna ID del Paciente
+
+# Guardar el DataFrame en un archivo CSV
+df_componentes.to_csv('componentes_principales.csv', index=False)
+
 print(principal_components)
+
+# Primero, escala tus datos. PCA es sensible a las escalas de las variables
+scaler = StandardScaler()
+data_scaled = scaler.fit_transform(principal_components)
+
+# Inicializa PCA para reducir tus datos a 3 dimensiones
+pca = PCA(n_components=3)
+data_3d = pca.fit_transform(data_scaled)
+
+# Crear un objeto vtkPoints para almacenar los datos tridimensionales
+points = vtk.vtkPoints()
+for i in range(len(data_3d)):
+    points.InsertNextPoint(data_3d[i])
+
+# Crear un polydata para los puntos
+polydata = vtk.vtkPolyData()
+polydata.SetPoints(points)
+
+# Visualizar los puntos con esferas pequeñas
+sphere = vtk.vtkSphereSource()
+sphere.SetRadius(0.01)
+
+glyph = vtk.vtkGlyph3D()
+glyph.SetInputData(polydata)
+glyph.SetSourceConnection(sphere.GetOutputPort())
+glyph.SetScaleModeToScaleByScalar()
+glyph.SetColorModeToColorByScalar()
+
+mapper = vtk.vtkPolyDataMapper()
+mapper.SetInputConnection(glyph.GetOutputPort())
+
+actor = vtk.vtkActor()
+actor.SetMapper(mapper)
+
+# Crear la ventana y el renderizador
+renderer = vtk.vtkRenderer()
+render_window = vtk.vtkRenderWindow()
+render_window.AddRenderer(renderer)
+
+render_window_interactor = vtk.vtkRenderWindowInteractor()
+render_window_interactor.SetRenderWindow(render_window)
+
+renderer.AddActor(actor)
+renderer.SetBackground(0.1, 0.1, 0.1)
+
+# Establecer posición inicial para la cámara
+camera = renderer.GetActiveCamera()
+camera.SetPosition(0, 0, 5)
+camera.SetFocalPoint(0, 0, 0)
+camera.SetViewUp(0, 1, 0)
+
+render_window.Render()
+render_window_interactor.Start()
