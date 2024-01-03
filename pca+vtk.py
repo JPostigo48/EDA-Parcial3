@@ -55,7 +55,7 @@ n_componentNumber = np.where(varianza_acumulada >= 0.95)[0][0] + 1
 print("Número mínimo de componentes para explicar al menos el 95% de la varianza:", n_componentNumber)
 
 
-# Aplica PCA
+# Aplicar PCA
 pca = PCA(n_components=n_componentNumber)  # número de componentes a reducir
 principal_components = pca.fit_transform(scaled_data)
 
@@ -71,11 +71,11 @@ df_componentes.to_csv('componentes_principales.csv', index=False)
 
 print(principal_components)
 
-# Primero, escala tus datos. PCA es sensible a las escalas de las variables
+# Primero, escalar los datos. PCA es sensible a las escalas de las variables
 scaler = StandardScaler()
 data_scaled = scaler.fit_transform(principal_components)
 
-# Inicializa PCA para reducir tus datos a 3 dimensiones
+# Inicializar PCA para reducir los datos a 3 dimensiones
 pca = PCA(n_components=3)
 data_3d = pca.fit_transform(data_scaled)
 
