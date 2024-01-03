@@ -1,0 +1,110 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
+import pandas as pd
+
+# Ubicar 'covid_DB.xlsx'
+file_path = 'covid_DB.xlsx'
+
+# Leer los datos del archivo Excel
+data = pd.read_excel(file_path, usecols='A:DG')
+
+
+# Excluir la columna 'Patient ID' 
+data = data.drop('Patient ID', axis=1)
+# Convertir valores categóricos a numéricos
+data = data.replace({'negative': 0, 'positive': 1})
+data = data.replace({'detected': 1, 'not_detected': 0})
+data = data.replace({'absent': 0,'normal': 1,'present': 1, 'not_done': 0})
+data = data.replace({'clear': 0.2, 'lightly_cloudy': 0.4, 'cloudy': 0.6, 'altered_coloring': 0.8})
+data = data.replace({'<1000': 500})
+data = data.replace({'Não Realizado': '0.5'})
+data = data.replace({'Ausentes': 0, 'Urato Amorfo --+':1, 'Oxalato de Cálcio -++':1, 'Oxalato de Cálcio +++':1, 'Urato Amorfo +++':1})
+data = data.replace({'light_yellow': 0.3, 'yellow':0.6, 'citrus_yellow':0.75, 'orange':0.9})
+
+
+# Excluir columnas vacias
+data = data.dropna(axis=1, how='all')
+# Imputar los valores NaN restantes con la media de cada columna
+imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
+data_imputed = imputer.fit_transform(data)
+
+# Escalar los datos
+scaler = StandardScaler()
+scaled_data = scaler.fit_transform(data_imputed)
+
+# Aplicar PCA con todos los componentes
+pca = PCA()
+pca.fit(scaled_data)
+
+# Calcular la varianza explicada acumulada
+varianza_acumulada = np.cumsum(pca.explained_variance_ratio_)
+
+# Graficar la varianza explicada acumulada
+plt.figure()
+plt.plot(varianza_acumulada)
+plt.xlabel('Número de Componentes')
+plt.ylabel('Varianza Explicada Acumulada')
+plt.show()
+
+# Encontrar el número de componentes para una varianza explicada >= 95%
+n_componentNumber = np.where(varianza_acumulada >= 0.95)[0][0] + 1
+print("Número mínimo de componentes para explicar al menos el 95% de la varianza:", n_componentNumber)
+
+
+# Aplica PCA
+pca = PCA(n_components=n_componentNumber)  # número de componentes a reducir
+principal_components = pca.fit_transform(scaled_data)
+
+# Cargar los datos originales incluyendo la columna "Patient ID"
+data_with_id = pd.read_excel('covid_DB.xlsx')
+
+# Crear un DataFrame con los componentes y el ID del paciente
+df_componentes = pd.DataFrame(principal_components, columns=[f'Componente_{i}' for i in range(1, n_componentNumber + 1)])
+df_componentes['Patient ID'] = data_with_id['Patient ID']  # Agregar la columna ID del Paciente
+
+# Guardar el DataFrame en un archivo CSV
+df_componentes.to_csv('componentes_principales.csv', index=False)
+
+print(principal_components)
+
+import pandas as pd
+from rtree import index
+
+# Leer el archivo CSV
+df = pd.read_csv('componentes_principales.csv')
+
+# Crear un diccionario para mapear índices del R-tree a Patient ID
+indice_a_id = {}
+
+# Configurar las propiedades del R-tree
+p = index.Property()
+p.dimension = 65  # Establece esto al número de dimensiones de tus componentes
+
+# Crear el índice R-tree
+idx = index.Index(properties=p)
+
+# Insertar los datos en el R-tree
+for i, row in df.iterrows():
+    point = tuple([row[f'Componente_{j}'] for j in range(1, 66)] * 2)
+    # Insertar el punto en el índice
+    idx.insert(i, point)
+    # Mapear el índice del R-tree al Patient ID
+    indice_a_id[i] = row['Patient ID']
+
+# Ejemplo de consulta: encuentra los 5 puntos más cercanos a un punto de interés
+# Defimos el punto de interés como el origen en 65 dimensiones
+punto_de_interes = tuple([0] * 65)
+
+# Realizamos la consulta en el R-tree para encontrar los índices de los 5 puntos más cercanos
+indices_cercanos = list(idx.nearest(coordinates=punto_de_interes, num_results=5))
+
+# Recuperamos los Patient ID correspondientes a los índices encontrados
+patient_ids_cercanos = [indice_a_id[indice] for indice in indices_cercanos]
+
+# Limitamos manualmente los resultados a los primeros 5
+patient_ids_cercanos = patient_ids_cercanos[:5]
+
+print("Patient ID de los 5 puntos más cercanos:", patient_ids_cercanos)
